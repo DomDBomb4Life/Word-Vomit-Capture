@@ -77,3 +77,10 @@ class ConversationManager:
         os.makedirs(recordings_dir, exist_ok=True)
         timestamp = time.strftime('%Y%m%d_%H%M%S')
         return os.path.join(recordings_dir, f"recording_{timestamp}.wav")
+    
+    def get_recordings_dir(self):
+        if not self.selected_conversation:
+            return None
+        recordings_dir = os.path.join(self.conversations_dir, self.selected_conversation, "recordings")
+        os.makedirs(recordings_dir, exist_ok=True)
+        return recordings_dir
