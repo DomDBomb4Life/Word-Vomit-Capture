@@ -25,10 +25,13 @@ class TranscriptEditor(QWidget):
             item_widget.setPlainText(text)
             item_widget.setReadOnly(False)
             item_widget.setMinimumHeight(50)
+            item_widget.setStyleSheet("background-color: #f0f0f0;")
             item.setSizeHint(item_widget.sizeHint())
             self.transcript_list.addItem(item)
             self.transcript_list.setItemWidget(item, item_widget)
             item.setData(Qt.UserRole, timestamp)
+            # Add timestamp display
+            item.setToolTip(f"Recorded on: {timestamp}")
             # Connect the textChanged signal
             item_widget.textChanged.connect(self.textChanged)
 
@@ -49,9 +52,10 @@ class TranscriptEditor(QWidget):
         item_widget.setPlainText(text)
         item_widget.setReadOnly(False)
         item_widget.setMinimumHeight(50)
+        item_widget.setStyleSheet("background-color: #f0f0f0;")
         item.setSizeHint(item_widget.sizeHint())
         self.transcript_list.addItem(item)
         self.transcript_list.setItemWidget(item, item_widget)
         item.setData(Qt.UserRole, timestamp)
-        # Connect the textChanged signal
+        item.setToolTip(f"Recorded on: {timestamp}")
         item_widget.textChanged.connect(self.textChanged)

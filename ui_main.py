@@ -2,7 +2,7 @@
 
 import sys
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QInputDialog, QApplication
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QInputDialog, QApplication, QFileDialog
 )
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 import os
@@ -98,7 +98,7 @@ class MainWindow(QMainWindow):
                 self.conversation_tree.refresh()
                 QMessageBox.information(self, "Success", f"Folder '{folder_name}' created successfully.")
             else:
-                QMessageBox.warning(self, "Error", "A folder with that name already exists.")
+                QMessageBox.warning(self, "Error", "A folder with that name already exists or invalid parent.")
         elif not folder_name:
             QMessageBox.warning(self, "Invalid Name", "Folder name cannot be empty.")
 
@@ -111,7 +111,7 @@ class MainWindow(QMainWindow):
                 self.conversation_tree.refresh()
                 QMessageBox.information(self, "Success", f"Conversation '{conversation_name}' created successfully.")
             else:
-                QMessageBox.warning(self, "Error", "A conversation with that name already exists.")
+                QMessageBox.warning(self, "Error", "A conversation with that name already exists or invalid parent.")
         elif not conversation_name:
             QMessageBox.warning(self, "Invalid Name", "Conversation name cannot be empty.")
 
@@ -148,6 +148,8 @@ class MainWindow(QMainWindow):
     def transcribe_audio(self):
         recordings_dir = self.conversation_manager.get_recordings_dir()
         chunk_files = sorted(glob.glob(os.path.join(recordings_dir, "recording_chunk_*.wav")))
+        if not chunk_files:
+            return
 
         def transcription_thread():
             all_transcripts = []
@@ -159,6 +161,8 @@ class MainWindow(QMainWindow):
                 else:
                     self.transcription_error.emit()
                     return
+                # Remove chunk file after transcription
+                os.remove(chunk_file)
             full_transcript = '\n'.join(all_transcripts)
             self.transcription_complete.emit(full_transcript)
 
@@ -181,7 +185,7 @@ class MainWindow(QMainWindow):
             return
         new_name, ok = QInputDialog.getText(self, "Rename", "Enter new name:", text=selected_path[-1])
         if ok and new_name and new_name != selected_path[-1]:
-            success = self.conversation_manager.rename_conversation(selected_path, new_name)
+            success = self.conversation_manager.rename_item(selected_path, new_name)
             if success:
                 self.conversation_tree.refresh()
                 QMessageBox.information(self, "Success", f"Renamed to '{new_name}' successfully.")
@@ -204,7 +208,7 @@ class MainWindow(QMainWindow):
             QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            success = self.conversation_manager.delete_conversation(selected_path)
+            success = self.conversation_manager.delete_item(selected_path)
             if success:
                 self.conversation_tree.refresh()
                 self.transcript_editor.clear()
@@ -245,11 +249,29 @@ class MainWindow(QMainWindow):
         self.conversation_manager.save_transcripts(transcripts)
 
     def transcribe_audio_file(self):
-        # Implement as needed
-        pass
+        if not self.conversation_manager.selected_conversation_path:
+            QMessageBox.warning(self, "No Conversation Selected", "Please select a conversation first.")
+            return
 
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
+        options = QFileDialog.Options()
+        options |= QFileDialog.ReadOnly
+        audio_file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Audio File",
+            "",
+            "Audio Files (*.wav)",
+            options=options
+        )
+        if audio_file_path:
+            threading.Thread(target=self.transcribe_selected_file, args=(audio_file_path,), daemon=True).start()
+
+    def transcribe_selected_file(self, audio_file_path):
+        def transcription_thread():
+            transcript_data = self.transcriber.transcribe(audio_file_path)
+            if transcript_data:
+                transcript_text = transcript_data.get('text', '')
+                self.transcription_complete.emit(transcript_text)
+            else:
+                self.transcription_error.emit()
+
+        threading.Thread(target=transcription_thread, daemon=True).start()

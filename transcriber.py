@@ -16,7 +16,6 @@ class Transcriber:
             'model': (None, 'whisper-1'),
             'response_format': (None, 'verbose_json'),
             'language': (None, language),
-            'timestamp_granularities[]': (None, 'segment'),
         }
 
         response = requests.post(url, headers=headers, files=files)

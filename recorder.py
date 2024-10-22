@@ -17,7 +17,7 @@ class Recorder:
         self.current_chunk = 0
         self.start_time = None
         self.lock = threading.Lock()
-    
+
     def record(self):
         self.recording = True
         self.start_time = time.time()
@@ -39,21 +39,19 @@ class Recorder:
                 self.frames.append(data)
             elapsed_time = time.time() - self.start_time
             if elapsed_time >= self.chunk_duration:
-                # Save the current chunk and start a new one
                 self.save_chunk()
                 self.start_time = time.time()
                 self.frames = []
-        # Save any remaining frames when recording stops
         if self.frames:
             self.save_chunk()
         self.stream.stop_stream()
         self.stream.close()
         self.audio.terminate()
         print("Recording stopped.")
-    
+
     def stop(self):
         self.recording = False
-    
+
     def save_chunk(self):
         with self.lock:
             chunk_filename = f"recording_chunk_{self.current_chunk}.wav"
