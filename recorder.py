@@ -4,6 +4,7 @@ import pyaudio
 import wave
 import threading
 import time
+import os
 
 class Recorder:
     def __init__(self, output_directory):
@@ -29,7 +30,11 @@ class Recorder:
                                       frames_per_buffer=1024)
         print("Recording started.")
         while self.recording:
-            data = self.stream.read(1024)
+            try:
+                data = self.stream.read(1024, exception_on_overflow=False)
+            except Exception as e:
+                print(f"Error reading audio stream: {e}")
+                continue
             with self.lock:
                 self.frames.append(data)
             elapsed_time = time.time() - self.start_time
