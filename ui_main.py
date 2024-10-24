@@ -2,8 +2,9 @@
 
 import sys
 from PyQt5.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QInputDialog, QApplication, QFileDialog
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QApplication, QFileDialog
 )
+from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 import os
 import glob
@@ -18,7 +19,6 @@ from config import OPENAI_API_KEY
 class MainWindow(QMainWindow):
     transcription_complete = pyqtSignal(str)
     transcription_error = pyqtSignal()
-
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Conversation Recorder")
@@ -45,22 +45,14 @@ class MainWindow(QMainWindow):
         content_layout = QHBoxLayout()
 
         # Control Buttons
-        self.new_folder_button = QPushButton("New Folder")
-        self.new_conv_button = QPushButton("New Conversation")
-        self.record_button = QPushButton("Start Recording")
-        self.rename_button = QPushButton("Rename")
-        self.delete_button = QPushButton("Delete")
-        self.transcribe_file_button = QPushButton("Transcribe Audio File")
-
-        control_layout.addWidget(self.new_folder_button)
-        control_layout.addWidget(self.new_conv_button)
+        self.record_button = QPushButton()
+        self.update_record_button_icon()
+        self.record_button.setFixedSize(50, 50)
         control_layout.addWidget(self.record_button)
-        control_layout.addWidget(self.rename_button)
-        control_layout.addWidget(self.delete_button)
-        control_layout.addWidget(self.transcribe_file_button)
 
         # Conversation Tree
         self.conversation_tree = ConversationTree(self.conversation_manager)
+        self.conversation_tree.parent = self  # So that context menu actions can call methods in MainWindow
         self.conversation_tree.itemSelectionChanged.connect(self.on_conversation_select)
 
         # Transcript Editor
@@ -76,50 +68,24 @@ class MainWindow(QMainWindow):
 
         # Disable buttons initially
         self.record_button.setEnabled(False)
-        self.rename_button.setEnabled(False)
-        self.delete_button.setEnabled(False)
-        self.transcribe_file_button.setEnabled(False)
         self.transcript_editor.setEnabled(False)
 
         # Connect signals
-        self.new_folder_button.clicked.connect(self.create_new_folder)
-        self.new_conv_button.clicked.connect(self.create_new_conversation)
         self.record_button.clicked.connect(self.toggle_recording)
-        self.rename_button.clicked.connect(self.rename_item)
-        self.delete_button.clicked.connect(self.delete_item)
-        self.transcribe_file_button.clicked.connect(self.transcribe_audio_file)
 
-    def create_new_folder(self):
-        folder_name, ok = QInputDialog.getText(self, "New Folder", "Enter folder name:")
-        if ok and folder_name:
-            parent_path = self.conversation_tree.get_selected_path()
-            success = self.conversation_manager.create_folder(folder_name, parent_path)
-            if success:
-                self.conversation_tree.refresh()
-                QMessageBox.information(self, "Success", f"Folder '{folder_name}' created successfully.")
-            else:
-                QMessageBox.warning(self, "Error", "A folder with that name already exists or invalid parent.")
-        elif not folder_name:
-            QMessageBox.warning(self, "Invalid Name", "Folder name cannot be empty.")
-
-    def create_new_conversation(self):
-        conversation_name, ok = QInputDialog.getText(self, "New Conversation", "Enter conversation name:")
-        if ok and conversation_name:
-            parent_path = self.conversation_tree.get_selected_path()
-            success = self.conversation_manager.create_conversation(conversation_name, parent_path)
-            if success:
-                self.conversation_tree.refresh()
-                QMessageBox.information(self, "Success", f"Conversation '{conversation_name}' created successfully.")
-            else:
-                QMessageBox.warning(self, "Error", "A conversation with that name already exists or invalid parent.")
-        elif not conversation_name:
-            QMessageBox.warning(self, "Invalid Name", "Conversation name cannot be empty.")
+    def update_record_button_icon(self):
+        if not self.recording:
+            self.record_button.setIcon(QIcon('icons/play.png'))  # Ensure the icon files exist
+        else:
+            self.record_button.setIcon(QIcon('icons/stop.png'))
+        self.record_button.setIconSize(self.record_button.size())
 
     def toggle_recording(self):
         if not self.recording:
             self.start_recording()
         else:
             self.stop_recording()
+        self.update_record_button_icon()
 
     def start_recording(self):
         if not self.conversation_manager.selected_conversation_path:
@@ -131,7 +97,6 @@ class MainWindow(QMainWindow):
         self.recording_thread = threading.Thread(target=self.recorder.record, daemon=True)
         self.recording_thread.start()
         self.recording = True
-        self.record_button.setText("Stop Recording")
         self.transcript_editor.setEnabled(False)
 
     def stop_recording(self):
@@ -139,7 +104,6 @@ class MainWindow(QMainWindow):
             self.recorder.stop()
             self.recording_thread.join()
             self.recording = False
-            self.record_button.setText("Start Recording")
             self.process_recording()
 
     def process_recording(self):
@@ -159,6 +123,7 @@ class MainWindow(QMainWindow):
                     transcript_text = transcript_data.get('text', '')
                     all_transcripts.append(transcript_text)
                 else:
+                    # Save the recording even if transcription fails
                     self.transcription_error.emit()
                     return
                 # Remove chunk file after transcription
@@ -179,20 +144,27 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "Transcription Failed", "Could not transcribe the audio.")
         self.transcript_editor.setEnabled(True)
 
-    def rename_item(self):
-        selected_path = self.conversation_tree.get_selected_path()
-        if not selected_path:
-            return
-        new_name, ok = QInputDialog.getText(self, "Rename", "Enter new name:", text=selected_path[-1])
-        if ok and new_name and new_name != selected_path[-1]:
-            success = self.conversation_manager.rename_item(selected_path, new_name)
+    def create_new_folder(self):
+        folder_name, ok = QFileDialog.getSaveFileName(self, "New Folder", "", options=QFileDialog.DontUseNativeDialog)
+        if ok and folder_name:
+            parent_path = self.conversation_tree.get_selected_path()
+            success = self.conversation_manager.create_folder(folder_name, parent_path)
             if success:
                 self.conversation_tree.refresh()
-                QMessageBox.information(self, "Success", f"Renamed to '{new_name}' successfully.")
+                QMessageBox.information(self, "Success", f"Folder '{folder_name}' created successfully.")
             else:
-                QMessageBox.warning(self, "Error", "Failed to rename.")
-        elif not new_name:
-            QMessageBox.warning(self, "Invalid Name", "Name cannot be empty.")
+                QMessageBox.warning(self, "Error", "A folder with that name already exists or invalid parent.")
+
+    def create_new_conversation(self):
+        conversation_name, ok = QFileDialog.getSaveFileName(self, "New Conversation", "", options=QFileDialog.DontUseNativeDialog)
+        if ok and conversation_name:
+            parent_path = self.conversation_tree.get_selected_path()
+            success = self.conversation_manager.create_conversation(conversation_name, parent_path)
+            if success:
+                self.conversation_tree.refresh()
+                QMessageBox.information(self, "Success", f"Conversation '{conversation_name}' created successfully.")
+            else:
+                QMessageBox.warning(self, "Error", "A conversation with that name already exists or invalid parent.")
 
     def delete_item(self):
         selected_item = self.conversation_tree.currentItem()
@@ -213,40 +185,23 @@ class MainWindow(QMainWindow):
                 self.conversation_tree.refresh()
                 self.transcript_editor.clear()
                 self.record_button.setEnabled(False)
-                self.rename_button.setEnabled(False)
-                self.delete_button.setEnabled(False)
-                self.transcribe_file_button.setEnabled(False)
                 self.transcript_editor.setEnabled(False)
                 QMessageBox.information(self, "Success", f"Deleted '{item_name}' successfully.")
             else:
                 QMessageBox.warning(self, "Error", "Failed to delete.")
 
-    def on_conversation_select(self):
+    def rename_item(self):
         selected_path = self.conversation_tree.get_selected_path()
-        if selected_path and self.conversation_tree.is_conversation(selected_path):
-            self.conversation_manager.select_conversation(selected_path)
-            self.load_transcript()
-            self.record_button.setEnabled(True)
-            self.rename_button.setEnabled(True)
-            self.delete_button.setEnabled(True)
-            self.transcribe_file_button.setEnabled(True)
-            self.transcript_editor.setEnabled(True)
-        else:
-            self.conversation_manager.deselect_conversation()
-            self.transcript_editor.clear()
-            self.record_button.setEnabled(False)
-            self.rename_button.setEnabled(False)
-            self.delete_button.setEnabled(False)
-            self.transcribe_file_button.setEnabled(False)
-            self.transcript_editor.setEnabled(False)
-
-    def load_transcript(self):
-        transcripts = self.conversation_manager.get_transcripts()
-        self.transcript_editor.set_transcripts(transcripts)
-
-    def save_transcript(self):
-        transcripts = self.transcript_editor.get_transcripts()
-        self.conversation_manager.save_transcripts(transcripts)
+        if not selected_path:
+            return
+        new_name, ok = QFileDialog.getSaveFileName(self, "Rename", selected_path[-1], options=QFileDialog.DontUseNativeDialog)
+        if ok and new_name and new_name != selected_path[-1]:
+            success = self.conversation_manager.rename_item(selected_path, new_name)
+            if success:
+                self.conversation_tree.refresh()
+                QMessageBox.information(self, "Success", f"Renamed to '{new_name}' successfully.")
+            else:
+                QMessageBox.warning(self, "Error", "Failed to rename.")
 
     def transcribe_audio_file(self):
         if not self.conversation_manager.selected_conversation_path:
@@ -275,3 +230,24 @@ class MainWindow(QMainWindow):
                 self.transcription_error.emit()
 
         threading.Thread(target=transcription_thread, daemon=True).start()
+
+    def on_conversation_select(self):
+        selected_path = self.conversation_tree.get_selected_path()
+        if selected_path and self.conversation_tree.is_conversation(selected_path):
+            self.conversation_manager.select_conversation(selected_path)
+            self.load_transcript()
+            self.record_button.setEnabled(True)
+            self.transcript_editor.setEnabled(True)
+        else:
+            self.conversation_manager.deselect_conversation()
+            self.transcript_editor.clear()
+            self.record_button.setEnabled(False)
+            self.transcript_editor.setEnabled(False)
+
+    def load_transcript(self):
+        transcripts = self.conversation_manager.get_transcripts()
+        self.transcript_editor.set_transcripts(transcripts)
+
+    def save_transcript(self):
+        transcripts = self.transcript_editor.get_transcripts()
+        self.conversation_manager.save_transcripts(transcripts)

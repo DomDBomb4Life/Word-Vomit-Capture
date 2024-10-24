@@ -74,9 +74,21 @@ class ConversationManager:
             return False
         node[new_name] = node.pop(old_path[-1])
         self.save_conversations()
+        # Also rename associated files and directories
+        self.rename_associated_files(old_path, new_name)
         self.selected_conversation = new_name
         self.selected_conversation_path = old_path[:-1] + [new_name]
         return True
+
+    def rename_associated_files(self, old_path, new_name):
+        old_transcript_dir = self.get_transcript_dir_from_path(old_path)
+        new_transcript_dir = self.get_transcript_dir_from_path(old_path[:-1] + [new_name])
+        if os.path.exists(old_transcript_dir):
+            os.rename(old_transcript_dir, new_transcript_dir)
+        old_recordings_dir = self.get_recordings_dir_from_path(old_path)
+        new_recordings_dir = self.get_recordings_dir_from_path(old_path[:-1] + [new_name])
+        if os.path.exists(old_recordings_dir):
+            os.rename(old_recordings_dir, new_recordings_dir)
 
     def delete_item(self, path):
         node = self.get_node(path[:-1])
@@ -94,58 +106,12 @@ class ConversationManager:
 
     def delete_associated_files(self, path):
         # Delete transcripts and recordings
-        transcript_path = self.get_transcript_path_from_path(path)
-        if os.path.exists(transcript_path):
-            os.remove(transcript_path)
         transcript_dir = self.get_transcript_dir_from_path(path)
         if os.path.exists(transcript_dir):
             shutil.rmtree(transcript_dir)
         recordings_dir = self.get_recordings_dir_from_path(path)
         if os.path.exists(recordings_dir):
             shutil.rmtree(recordings_dir)
-
-    def get_transcript_path(self):
-        return self.get_transcript_path_from_path(self.selected_conversation_path)
-
-    def get_transcript_path_from_path(self, path):
-        if not path:
-            return None
-        filename = "_".join(path) + "_transcript.txt"
-        return os.path.join(self.conversations_dir, filename)
-
-    def get_transcript(self):
-        transcripts = self.get_transcripts()
-        return "\n\n".join([text for timestamp, text in transcripts])
-
-    def save_transcript(self, transcript):
-        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-        transcripts = self.get_transcripts()
-        transcripts.append((timestamp, transcript))
-        self.save_transcripts(transcripts)
-
-    def append_transcript(self, text):
-        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-        transcripts = self.get_transcripts()
-        transcripts.append((timestamp, text))
-        self.save_transcripts(transcripts)
-
-    def get_recordings_dir(self):
-        return self.get_recordings_dir_from_path(self.selected_conversation_path)
-
-    def get_recordings_dir_from_path(self, path):
-        if not path:
-            return None
-        dir_name = "_".join(path) + "_recordings"
-        recordings_dir = os.path.join(self.conversations_dir, dir_name)
-        os.makedirs(recordings_dir, exist_ok=True)
-        return recordings_dir
-
-    def get_conversation_last_modified(self, path):
-        transcript_dir = self.get_transcript_dir_from_path(path)
-        if os.path.exists(transcript_dir):
-            return os.path.getmtime(transcript_dir)
-        else:
-            return 0
 
     def get_transcript_dir(self):
         return self.get_transcript_dir_from_path(self.selected_conversation_path)
@@ -156,6 +122,22 @@ class ConversationManager:
         dir_name = "_".join(path) + "_transcripts"
         transcript_dir = os.path.join(self.conversations_dir, dir_name)
         return transcript_dir
+
+    def get_recordings_dir(self):
+        return self.get_recordings_dir_from_path(self.selected_conversation_path)
+
+    def get_recordings_dir_from_path(self, path):
+        if not path:
+            return None
+        dir_name = "_".join(path) + "_recordings"
+        recordings_dir = os.path.join(self.conversations_dir, dir_name)
+        return recordings_dir
+
+    def append_transcript(self, text):
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        transcripts = self.get_transcripts()
+        transcripts.append((timestamp, text))
+        self.save_transcripts(transcripts)
 
     def get_transcripts(self):
         transcript_dir = self.get_transcript_dir()
@@ -184,3 +166,10 @@ class ConversationManager:
                 filepath = os.path.join(transcript_dir, filename)
                 with open(filepath, 'w') as f:
                     f.write(text)
+
+    def get_conversation_last_modified(self, path):
+        transcript_dir = self.get_transcript_dir_from_path(path)
+        if os.path.exists(transcript_dir):
+            return os.path.getmtime(transcript_dir)
+        else:
+            return 0
